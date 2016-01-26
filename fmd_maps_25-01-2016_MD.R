@@ -143,11 +143,13 @@ for(i in names){
   rewired.name <- paste0(month, '_', stand.still, '_', nearest.market, exemptions) #  create new dataframe names
   df.names[which(i == names)] <- rewired.name #  store df.names
 
-  x <- read.csv(file.path(summary.path, #  read in file from csv; assign new name
+  output <- read.csv(file.path(summary.path, #  read in file from csv; assign new name
                           paste0(i, ".csv")))
-
-  model.summary.t <- as.data.frame(t(x[, -1]), header=TRUE) #  input needs to be transposed
-
+  output$Thread <- as.factor(output$Thread)
+  test <- aggregate(output[, 2:length(output), drop = FALSE], 
+                    list(group = output$Thread), mean) #  takes the mean for each row in output
+  model.summary.t <- as.data.frame(t(test[, -1]), header = TRUE) #  input needs to be transposed
+  
   x <- data.frame(total = rowSums(model.summary.t), #  calculate the row sums
                   cph = rownames(model.summary.t)) #  get cphs from row names
   names(x) <- c(paste0(rewired.name,'.total'), 'cph') #  rename the column names
@@ -257,13 +259,13 @@ for(i in names(scot.grid.xy.merge)[grepl('.total', names(scot.grid.xy.merge))]) 
   
   if (substr(i, 1, 3) == 'Jun'){
     
-    scot.grid.xy.merge[[paste0('delta', substr(i, 1, nchar(i)-6))]] <- scot.grid.xy.merge[[i]] - scot.grid.xy.merge$Jun.observed #  find the change between the network and observed
-    scot.grid.xy.merge[[paste0('per.change', substr(i, 1, nchar(i)-6))]] <- (scot.grid.xy.merge[[i]] - scot.grid.xy.merge$Jun.observed) / scot.grid.xy.merge$Jun.observed #  find the percentage change
+    scot.grid.xy.merge[[paste0('delta', substr(i, 1, nchar(i) - 6))]] <- scot.grid.xy.merge[[i]] - scot.grid.xy.merge$Jun.observed #  find the change between the network and observed
+    scot.grid.xy.merge[[paste0('per.change', substr(i, 1, nchar(i) - 6))]] <- (scot.grid.xy.merge[[i]] - scot.grid.xy.merge$Jun.observed) / scot.grid.xy.merge$Jun.observed #  find the percentage change
     
   } else {
     
-    scot.grid.xy.merge[[paste0('delta', substr(i, 1, nchar(i)-6))]] <- scot.grid.xy.merge[[i]] - scot.grid.xy.merge$Oct.observed #  find the change between the network and observed
-    scot.grid.xy.merge[[paste0('per.change', substr(i, 1, nchar(i)-6))]] <- (scot.grid.xy.merge[[i]] - scot.grid.xy.merge$Oct.observed) / scot.grid.xy.merge$Oct.observed #  find the percentage change
+    scot.grid.xy.merge[[paste0('delta', substr(i, 1, nchar(i) - 6))]] <- scot.grid.xy.merge[[i]] - scot.grid.xy.merge$Oct.observed #  find the change between the network and observed
+    scot.grid.xy.merge[[paste0('per.change', substr(i, 1, nchar(i) - 6))]] <- (scot.grid.xy.merge[[i]] - scot.grid.xy.merge$Oct.observed) / scot.grid.xy.merge$Oct.observed #  find the percentage change
     
   }
 }
@@ -348,11 +350,15 @@ ggplot() +
   geom_polygon(data=scot.grid.xy.merge, #  grid
                aes(long,
                    lat,
-                   group=group,
-                   fill=num_farms),
+                   # fill=num_farms,
+                   # fill = Jun.observed,
+                   # fill = Jun_13_FF.total,
+                   # fill = per.changeJun_13_FF,
+                   fill = deltaJun_13_FF,
+                   group=group),
                colour='black') + #  draws borders for either parishes or counties
   coord_equal() + map.theme +
-  scale_fill_continuous('Observed of farms\nper 10km grid',
+  scale_fill_continuous(#'Observed of farms\nper 10km grid',
                         low = 'white', high = 'red2')
 # #Sibylle
 # ggplot() +

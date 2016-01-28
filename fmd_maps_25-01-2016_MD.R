@@ -336,6 +336,7 @@ for(i in names(scot.grid.xy.merge)[grepl('.total', names(scot.grid.xy.merge))]) 
 #### create maps ####
 #~~~~~~~~~~~~~~~~~~~#
 
+# generic theme to apply to all maps
 map.theme <- theme(panel.background = element_rect(fill = "lightblue3"),
                    panel.grid.major = element_blank(),
                    panel.grid.minor = element_blank(),
@@ -344,29 +345,385 @@ map.theme <- theme(panel.background = element_rect(fill = "lightblue3"),
                    axis.title = element_blank(),
                    panel.border = element_blank())
 
-ggplot() +
-  # geom_polygon(data=scot.par.xy.merge, #  parishes
-  # geom_polygon(data=scot.par.union.xy.merge, #  counties
-  geom_polygon(data=scot.grid.xy.merge, #  grid
-               aes(long,
-                   lat,
-                   # fill=num_farms,
-                   # fill = Jun.observed,
-                   # fill = Jun_13_FF.total,
-                   # fill = per.changeJun_13_FF,
-                   fill = deltaJun_13_FF,
-                   group=group),
-               colour='black') + #  draws borders for either parishes or counties
-  coord_equal() + map.theme +
-  scale_fill_continuous(#'Observed of farms\nper 10km grid',
-                        low = 'white', high = 'red2')
+#~~~~~~~~~~~~~~~~~~~~~#
+#### June maps: 13 ####
+#~~~~~~~~~~~~~~~~~~~~~#
+
+test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaJun_13', names(scot.grid.xy.merge))], range) #  range of each
+Jun.13.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
+                  ceiling(max(abs(range(unlist(test))))))
+
+png('Jun_13_plots.png', res = 300, height = 7, width = 12, units = 'in')
+grid.arrange( #  for multiplot 
+  ggplot() +
+    geom_polygon(data=scot.grid.xy.merge, #  grid
+                 aes(long, lat,
+                     fill = Jun.observed,
+                     group = group), 
+                 colour = 'gray') + #  draws borders for either parishes or counties
+    geom_text(data=scot.grid.xy.merge,
+              aes(label = 'June obs',  
+                  x = min(scot.grid.xy.merge$long),
+                  y = max(scot.grid.xy.merge$lat)),
+              size = 16,
+              vjust = "inward", hjust = "inward") +
+    coord_equal() + map.theme +
+    scale_fill_gradient2(#expression(paste("Infections per 10", km^{2})), 
+      'Infections\n',
+      low = 'blue', midpoint = 0, high = 'red2', 
+      limits = Jun.13.range,
+      breaks = seq.int(round_any(Jun.13.range, 5)[1], round_any(Jun.13.range, 5)[2], 5)), #  creates flexible breaks using round_any in plyr, 
+  arrangeGrob(
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaJun_13_FF,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '13_FF',  
+                x = min(scot.grid.xy.merge$long),
+                y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE, 
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.13.range), 
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaJun_13_FT,
+                       group = group),
+                   colour = 'gray') +
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '13_FT',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE,
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.13.range),
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaJun_13_TF,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '13_TF',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE,
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.13.range),
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaJun_13_TT,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '13_TT',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE, 
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.13.range),
+    ncol = 2), 
+  ncol = 2, widths = c(1, 1))
+dev.off()
+
+#~~~~~~~~~~~~~~~~~~~~~#
+#### June maps: 6 ####
+#~~~~~~~~~~~~~~~~~~~~~#
+
+test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaJun_6', names(scot.grid.xy.merge))], range) #  range of each
+Jun.6.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
+                  ceiling(max(abs(range(unlist(test))))))
+
+png('Jun_6_plots.png', res = 300, height = 7, width = 12, units = 'in')
+grid.arrange( #  for multiplot 
+  ggplot() +
+    geom_polygon(data=scot.grid.xy.merge, #  grid
+                 aes(long, lat,
+                     fill = Jun.observed,
+                     group = group), 
+                 colour = 'gray') + #  draws borders for either parishes or counties
+    geom_text(data=scot.grid.xy.merge,
+              aes(label = 'June obs',  
+                  x = min(scot.grid.xy.merge$long),
+                  y = max(scot.grid.xy.merge$lat)),
+              size = 16,
+              vjust = "inward", hjust = "inward") +
+    coord_equal() + map.theme +
+    scale_fill_gradient2(#expression(paste("Infections per 10", km^{2})), 
+      'Infections\n',
+      low = 'blue', midpoint = 0, high = 'red2', 
+      limits = Jun.6.range, 
+      breaks = seq.int(round_any(Jun.6.range, 5)[1], round_any(Jun.6.range, 5)[2], 5)), #  creates flexible breaks using round_any in plyr
+  arrangeGrob(
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaJun_6_FF,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '6_FF',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE, 
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.6.range), 
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaJun_6_FT,
+                       group = group),
+                   colour = 'gray') +
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '6_FT',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE,
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.6.range),
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaJun_6_TF,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '6_TF',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE,
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.6.range),
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaJun_6_TT,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '6_TT',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE, 
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.6.range),
+    ncol = 2), 
+  ncol = 2, widths = c(1, 1))
+dev.off()
+
+#~~~~~~~~~~~~~~~~~~~~~~~~#
+#### October maps: 13 ####
+#~~~~~~~~~~~~~~~~~~~~~~~~#
+
+test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaOct_13', names(scot.grid.xy.merge))], range) #  range of each
+Oct.13.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
+                  ceiling(max(abs(range(unlist(test))))))
+
+png('Oct_13_plots.png', res = 300, height = 7, width = 12, units = 'in')
+grid.arrange( #  for multiplot 
+  ggplot() +
+    geom_polygon(data=scot.grid.xy.merge, #  grid
+                 aes(long, lat,
+                     fill = Oct.observed,
+                     group = group), 
+                 colour = 'gray') + #  draws borders for either parishes or counties
+    geom_text(data=scot.grid.xy.merge,
+              aes(label = 'Oct obs',  
+                  x = min(scot.grid.xy.merge$long),
+                  y = max(scot.grid.xy.merge$lat)),
+              size = 16,
+              vjust = "inward", hjust = "inward") +
+    coord_equal() + map.theme +
+    scale_fill_gradient2(#expression(paste("Infections per 10", km^{2})), 
+      'Infections\n',
+      low = 'blue', midpoint = 0, high = 'red2', 
+      limits = Oct.13.range,
+      breaks = seq.int(round_any(Oct.13.range, 5)[1], round_any(Oct.13.range, 5)[2], 5)), #  creates flexible breaks using round_any in plyr, 
+  arrangeGrob(
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaOct_13_FF,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '13_FF',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE, 
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.13.range), 
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaOct_13_FT,
+                       group = group),
+                   colour = 'gray') +
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '13_FT',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE,
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.13.range),
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaOct_13_TF,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '13_TF',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE,
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.13.range),
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaOct_13_TT,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '13_TT',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE, 
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.13.range),
+    ncol = 2), 
+  ncol = 2, widths = c(1, 1))
+dev.off()
+
+#~~~~~~~~~~~~~~~~~~~~~~~#
+#### October maps: 6 ####
+#~~~~~~~~~~~~~~~~~~~~~~~#
+
+test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaOct_6', names(scot.grid.xy.merge))], range) #  range of each
+Oct.6.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
+                 ceiling(max(abs(range(unlist(test))))))
+
+png('Oct_6_plots.png', res = 300, height = 7, width = 12, units = 'in')
+grid.arrange( #  for multiplot 
+  ggplot() +
+    geom_polygon(data=scot.grid.xy.merge, #  grid
+                 aes(long, lat,
+                     fill = Oct.observed,
+                     group = group), 
+                 colour = 'gray') + #  draws borders for either parishes or counties
+    geom_text(data=scot.grid.xy.merge,
+              aes(label = 'Oct obs',  
+                  x = min(scot.grid.xy.merge$long),
+                  y = max(scot.grid.xy.merge$lat)),
+              size = 16,
+              vjust = "inward", hjust = "inward") +
+    coord_equal() + map.theme +
+    scale_fill_gradient2(#expression(paste("Infections per 10", km^{2})), 
+      'Infections\n',
+      low = 'blue', midpoint = 0, high = 'red2', 
+      limits = Oct.6.range, 
+      breaks = seq.int(-200, 200, by = 50)), #  creates flexible breaks using round_any in plyr
+  arrangeGrob(
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaOct_6_FF,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '6_FF',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE, 
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.6.range), 
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaOct_6_FT,
+                       group = group),
+                   colour = 'gray') +
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '6_FT',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE,
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.6.range),
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaOct_6_TF,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '6_TF',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE,
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.6.range),
+    ggplot() +
+      geom_polygon(data=scot.grid.xy.merge, #  grid
+                   aes(long, lat, 
+                       fill = deltaOct_6_TT,
+                       group = group),
+                   colour = 'gray') + 
+      geom_text(data=scot.grid.xy.merge,
+                aes(label = '6_TT',  
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
+                size = 16,
+                vjust = "inward", hjust = "inward") +
+      coord_equal() + map.theme +
+      scale_fill_gradient2(guide=FALSE, 
+                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.6.range),
+    ncol = 2), 
+  ncol = 2, widths = c(1, 1))
+dev.off()
+
 # #Sibylle
 # ggplot() +
 #   #geom_polygon(data=scot.par.union.xy.merge, #  parishes
 #   geom_polygon(data=scot.par.union.xy.merge, #  counties
 #                aes(long,
 #                    lat,
-#                    group=group,
+#                    group = group,
 #                    fill=per.change.Oct_13_FF)) +#,
 #                    #fill=deltaOct_13_FF))+
 #   coord_equal() + map.theme +
@@ -379,7 +736,7 @@ ggplot() +
 #   geom_polygon(data=scot.par.union.xy.merge, #  counties
 #                aes(long,
 #                    lat,
-#                    group=group,
+#                    group = group,
 #                    #fill=per.changeOct_13_FT)) +#,
 #                    fill=deltaOct_13_FT)) +
 #   #fill = log10(delta.Oct_13_FT + 120855)), colour='black') + #  draws borders for either parishes or counties
@@ -392,7 +749,7 @@ ggplot() +
 #   geom_polygon(data=scot.par.union.xy.merge, #  counties
 #                aes(long,
 #                    lat,
-#                    group=group,
+#                    group = group,
 #                    #fill=per.changeOct_13_TF)) +#,
 #                    fill = deltaOct_13_TF), # max = 2178, min = -42665
 #                colour='black') + #  draws borders for either parishes or counties
@@ -407,7 +764,7 @@ ggplot() +
 #   geom_polygon(data=scot.par.union.xy.merge, #  counties
 #                aes(long,
 #                    lat,
-#                    group=group,
+#                    group = group,
 #                    # fill=per.changeOct_13_TT)) +#,
 #                    fill=deltaOct_13_TT), # max = 3770, min = -26270
 #                colour='black') + #  draws borders for either parishes or counties
@@ -420,7 +777,7 @@ ggplot() +
 #   geom_polygon(data=scot.par.union.xy.merge, #  counties
 #                aes(long,
 #                    lat,
-#                    group=group,
+#                    group = group,
 #                    #fill=per.changeOct_6_FF)) +#,
 #                    fill = deltaOct_6_FF), # max = 31979, min = -16698
 #                colour='black') + #  draws borders for either parishes or counties
@@ -434,7 +791,7 @@ ggplot() +
 #   geom_polygon(data=scot.par.union.xy.merge, #  counties
 #                aes(long,
 #                    lat,
-#                    group=group,
+#                    group = group,
 #                    # fill=per.changeOct_6_FT)) +#,
 #                    fill=deltaOct_6_FT), # max = 22918, min = -11123
 #                colour='black') + #  draws borders for either parishes or counties
@@ -448,7 +805,7 @@ ggplot() +
 #   geom_polygon(data=scot.par.xy.merge, #  counties
 #                aes(long,
 #                    lat,
-#                    group=group,
+#                    group = group,
 #                    #fill=per.changeOct_6_TT)) +#,
 #                    fill=deltaOct_6_TT), # max = 2106, min = -48063
 #                colour='black') + #  draws borders for either parishes or counties
@@ -460,12 +817,12 @@ ggplot() +
 # density gridarrange
 # png
 #grid.arrange(
-ggplot(scot.par.union.xy.merge) +
-  geom_density(data = scot.par.union.xy.merge, aes(x = total, colour='red')) +
-  geom_density(data = scot.par.union.xy.merge, aes(x = delta.Oct_13_FF, colour='blue')) +
-  geom_density(data = scot.par.union.xy.merge, aes(x = delta.Oct_13_FT, colour='green')) +
-  geom_density(data = scot.par.union.xy.merge, aes(x = delta.Oct_13_TF, colour='yellow')) +
-  geom_density(data = scot.par.union.xy.merge, aes(x = delta.Oct_13_TT, colour='brown'))
+ggplot(scot.grid.xy.merge) +
+  geom_density(data = scot.grid.xy.merge, aes(x = Oct.observed, colour='red')) +
+  geom_density(data = scot.grid.xy.merge, aes(x = deltaOct_13_FF, colour='blue')) +
+  geom_density(data = scot.grid.xy.merge, aes(x = deltaOct_13_FT, colour='green')) +
+  geom_density(data = scot.grid.xy.merge, aes(x = deltaOct_13_TF, colour='yellow')) +
+  geom_density(data = scot.grid.xy.merge, aes(x = deltaOct_13_TT, colour='brown'))
 #ncol = 2
 #)
 

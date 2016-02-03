@@ -33,7 +33,9 @@ scot.par <- spTransform(scot.par, CRS(proj4string(gb.10km))) #  transform CRS to
 #### 'over' the map of scotland with the gb grid ####
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
-scot.grid <- gb.10km[!is.na(over(gb.10km, as(scot.par, "SpatialPolygons"))), ]
+grid.crop <- gb.10km[!is.na(over(gb.10km, as(scot.par, "SpatialPolygons"))), ]
+scot.shell <- gIntersection(grid.crop, scot.par) #  maybe try to just get the shell of scotland?
+scot.grid <- as(gIntersection(grid.crop, scot.shell, byid = TRUE, drop_lower_td = TRUE), 'SpatialPolygonsDataFrame')
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 #### observed location data ####
@@ -115,6 +117,7 @@ rm(key, key.unique, missing.key)
 
 # summary file contains a matrix with cphs and dates of infection
 # months should be in seperate folders by month
+# thread number needs to be calculated in order to subset the largest 5% of epidemics
 
 # summary.path <- '/Users/sibylle/Documents/DB_Sibylle/SimulationResultFinal/summary/' #  location of all the summary files
 summary.path <- 'C:/Users/Michael/Desktop/summary/' #  location of all the summary files
@@ -123,6 +126,8 @@ filenames <- list.files(path = summary.path,
 names <- substr(filenames, 1, nchar(filenames) - 4) #  Create list of data frame names without the extentions
 df.names <- c() #  create an empty vector to store the data.frame names
 
+output.summary <- data.frame(matrix(ncol = 6, nrow = length(names)))
+names(output.summary) <- names(summary(c(1,2))) #  example use of summary to get the names
 # Load all rewired files; assign reasonable names
 
 for(i in names){
@@ -135,7 +140,7 @@ for(i in names){
   stand.still <- csv.name[[1]][4] #  stand still = 4th field
 
   nearest.market <- csv.name[[1]][7] #  nearest market = 7th field
-  nearest.market <- substr(nearest.market,1,1) #  only store the first letter
+  nearest.market <- substr(nearest.market, 1, 1) #  only store the first letter
 
   exemptions <- csv.name[[1]][9]  # exemptions = 9th field
   exemptions <- substr(exemptions, 1, 1) #  only store the first letter
@@ -145,13 +150,19 @@ for(i in names){
 
   output <- read.csv(file.path(summary.path, #  read in file from csv; assign new name
                           paste0(i, ".csv")))
-  output$Thread <- as.factor(output$Thread)
-  test <- aggregate(output[, 2:length(output), drop = FALSE], 
-                    list(group = output$Thread), mean) #  takes the mean for each row in output
-  model.summary.t <- as.data.frame(t(test[, -1]), header = TRUE) #  input needs to be transposed
+
+  #   output <- output[order(output$Thread), ]
+#   output$run.id <- rep.int(1:500, 21)
+    output$Thread <- as.factor(output$Thread)
   
-  x <- data.frame(total = rowSums(model.summary.t), #  calculate the row sums
-                  cph = rownames(model.summary.t)) #  get cphs from row names
+  output.summary[which(names==i), ] <- summary(output$Total)
+  
+  test <- aggregate(output[, 2:length(output) - 1, drop = FALSE], 
+                    list(group = output$Thread), mean) #  takes the mean for each row in output
+  
+  model.summary.t <- as.data.frame(t(test[, -1]), header = TRUE) #  input needs to be transposed
+  x <- data.frame(total = rowSums(model.summary.t[2:nrow(model.summary.t), ]), #  calculate the row sums
+                  cph = rownames(model.summary.t[2:nrow(model.summary.t), ])) #  get cphs from row names
   names(x) <- c(paste0(rewired.name,'.total'), 'cph') #  rename the column names
 
   x$cph <- gsub('[.]', '/', x$cph) #  square brackets needed to replace full stop
@@ -162,6 +173,8 @@ for(i in names){
   rm(model.summary.t, exemptions, month, nearest.market, stand.still, x) #  clean up
 
 }
+
+row.names(output.summary) <- df.names[1:16]
 
 # load all observed files
 
@@ -189,7 +202,7 @@ for (i in network.months) {
   
 }
 
-rm(observed.file.list, model.summary, model.summary.t, test, summary.agg, i)
+rm(model.summary, model.summary.t, test, summary.agg, i)
 
 # base R attempt
 
@@ -215,8 +228,8 @@ rm(observed.file.list, model.summary, model.summary.t, test, summary.agg, i)
 # merge all dataframes; 6225 cphs don't have geocoords
 # Reduce function recommended by Stack Overflow, not 100% sure how it works though :/
 
-df.names <- c(df.names, ls(pattern = 'observed'))#  add the observed data.frames to list of rewired data.frames
-summary.plot <- Reduce(function(x, y) merge(x, y, by = 'cph'), append(list(locations), lapply(df.names, get)))
+plot.names <- c(df.names, ls(pattern = '_observed')) #  add the observed data.frames to list of rewired data.frames
+summary.plot <- Reduce(function(x, y) merge(x, y, by = 'cph'), append(list(locations), lapply(plot.names, get)))
 
 
 # calculate the number of unique holdings infected
@@ -233,9 +246,12 @@ summary.points <- spTransform(summary.points, CRS(proj4string(gb.10km))) #  tran
 #### calculate the number of infected farms per polygon ####
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
+# process data to create maps
 # may just be able to merge by id at fortify level
 
-### grid calculations
+#~~~~~~~~~~~~~~~~~~~~~~~~~#
+#### grid calculations ####
+#~~~~~~~~~~~~~~~~~~~~~~~~~#
 
 grid.over <- over(as(scot.grid, "SpatialPolygons"), summary.points, fn = sum) #  sum the number of infected farms by 10km grid
 grid.over$id <- rownames(grid.over) #  store row names as id for later merging
@@ -252,9 +268,8 @@ scot.grid.xy <- scot.grid.xy[order(scot.grid.xy$order), ] #  order the new dataf
 scot.grid.xy.merge <- merge(scot.grid.xy, grid.over, all.x = TRUE)
 scot.grid.xy.merge <- merge(scot.grid.xy.merge, grid.length, all.x = TRUE)
 
-scot.grid.xy.merge[is.na(scot.grid.xy.merge)] <- 0 #  replace all NAs with 0s
+# scot.grid.xy.merge[is.na(scot.grid.xy.merge)] <- 0 #  replace all NAs with 0s
 
-#
 for(i in names(scot.grid.xy.merge)[grepl('.total', names(scot.grid.xy.merge))]) { #  loop through the names of the columns storing the rewired network results
   
   if (substr(i, 1, 3) == 'Jun'){
@@ -270,86 +285,116 @@ for(i in names(scot.grid.xy.merge)[grepl('.total', names(scot.grid.xy.merge))]) 
   }
 }
 
-### ag parish
 
-# par.over <- over(scot.par, summary.points, fn = sum) #  sum the number of infected farms by parish
+
+# #~~~~~~~~~~~~~~~~~#
+# #### ag parish ####
+# #~~~~~~~~~~~~~~~~~#
+# 
+# par.over <- over(as(scot.par, 'SpatialPolygons'), summary.points, fn = sum) #  sum the number of infected farms by parish
 # par.over$id <- rownames(par.over) #  store row names as id for later merging
 # 
-# counties.length <- over(scot.par, summary.points[c('total')], fn = length) #  count the number of infected farms by parish
+# counties.length <- over(as(scot.par, 'SpatialPolygons'), summary.points[1], fn = length) #  count the number of infected farms by parish
 # names(counties.length) <- c('num_farms') #  rename variable to avoid confusion
 # counties.length$id <- rownames(counties.length) #  store row names as id for later merging
-# 
+#  
 # scot.par@data$id <- rownames(scot.par@data) #  create an id column for merging
-# scot.par.xy <- fortify(scot.par, region='id') #  convert spatial dataframe into normal dataframe for ggplot2
+# scot.par.xy <- fortify(scot.par, region = 'id') #  convert spatial dataframe into normal dataframe for ggplot2
 # scot.par.xy <- scot.par.xy[order(scot.par.xy$order), ] #  order the new dataframe
 # 
 # # combine polygons data with number of infected locations and total number of locations
 # scot.par.xy.merge <- merge(scot.par.xy, par.over, all.x = TRUE)
 # scot.par.xy.merge <- merge(scot.par.xy.merge, counties.length, all.x = TRUE)
 # 
-# scot.par.xy.merge$total[is.na(scot.par.xy.merge$total)] <- 0
+# # scot.par.xy.merge[is.na(scot.par.xy.merge)] <- 0 #  replace all NAs with 0s
 # 
-# #
 # for(i in names(scot.par.xy.merge)[grepl('.total', names(scot.par.xy.merge))]) { #  loop through the names of the columns storing the rewired network results
-# 
-#   scot.par.xy.merge[[paste0('delta', substr(i, 1, nchar(i)-6))]] <- scot.par.xy.merge[[i]] - scot.par.xy.merge$total #  find the change between the network and observed
-#   scot.par.xy.merge[[paste0('per.change', substr(i, 1, nchar(i)-6))]] <- (scot.par.xy.merge[[i]] - scot.par.xy.merge$total) / scot.par.xy.merge$total #  find the percentage change
-# 
+#   
+#   if (substr(i, 1, 3) == 'Jun'){
+#     
+#     scot.par.xy.merge[[paste0('delta', substr(i, 1, nchar(i) - 6))]] <- scot.par.xy.merge[[i]] - scot.par.xy.merge$Jun.observed #  find the change between the network and observed
+#     scot.par.xy.merge[[paste0('per.change', substr(i, 1, nchar(i) - 6))]] <- (scot.par.xy.merge[[i]] - scot.par.xy.merge$Jun.observed) / scot.par.xy.merge$Jun.observed #  find the percentage change
+#     
+#   } else {
+#     
+#     scot.par.xy.merge[[paste0('delta', substr(i, 1, nchar(i) - 6))]] <- scot.par.xy.merge[[i]] - scot.par.xy.merge$Oct.observed #  find the change between the network and observed
+#     scot.par.xy.merge[[paste0('per.change', substr(i, 1, nchar(i) - 6))]] <- (scot.par.xy.merge[[i]] - scot.par.xy.merge$Oct.observed) / scot.par.xy.merge$Oct.observed #  find the percentage change
+#     
+#   }
 # }
 # 
+# #~~~~~~~~~~~~~~~~~~~~~~~#
+# #### ag county union ####
+# #~~~~~~~~~~~~~~~~~~~~~~~#
 # 
-# # ag county union
 # county.id <- factor(master.key$county) #  factorise the list of counties
 # scot.par.union <- unionSpatialPolygons(scot.par, county.id) #  combine the parishes into counties by the counties vector
 # 
 # test <- data.frame(getSpPPolygonsIDSlots(scot.par.union)) #  create a dataframe with ids from the counties spatial polygons
+# 
+# ### Warning message: use *apply and slot directly ###
+# # seems to work ok
+# 
 # row.names(test) <- test$getSpPPolygonsIDSlots.scot.par.union #  add the rownames to new dataframe
 # scot.par.union <- SpatialPolygonsDataFrame(Sr = scot.par.union, #  create a new spatial polygons data frame; needed for fortify
 #                                            data = test)
 # rm(test)
 # 
 # # county level fortify
-# scot.par.union@data$id <- rowna4mes(scot.par.union@data) #  create an id column for merging
+# scot.par.union@data$id <- rownames(scot.par.union@data) #  create an id column for merging
 # scot.par.union.xy <- fortify(scot.par.union, region = 'id') #  convert spatial dataframe into normal dataframe for ggplot2
 # scot.par.union.xy <- scot.par.union.xy[order(scot.par.union.xy$order), ] #  order the new dataframe
 # 
-# par.over.union <- over(scot.par.union, summary.points, fn = sum) #  sum the number of infected farms by county
+# par.over.union <- over(as(scot.par.union, 'SpatialPolygons'), summary.points, fn = sum) #  sum the number of infected farms by county
 # par.over.union$id <- rownames(par.over.union) #  store row names as id for later merging
-# 
-# counties.length.union <- over(scot.par.union, summary.points[c('total')], fn = length) #  count the number of infected farms by parish
+#  
+# counties.length.union <- over(as(scot.par.union, 'SpatialPolygons'), summary.points[1], fn = length) #  count the number of infected farms by parish
 # names(counties.length.union) <- c('num_farms') #  rename variable to avoid confusion
 # counties.length.union$id <- rownames(counties.length.union) #  store row names as id for later merging
 # 
 # # combine polygons data with number of infected locations and total number of locations
-# scot.par.union.xy.merge <- merge(scot.par.union.xy, par.over.union)
-# scot.par.union.xy.merge <- merge(scot.par.union.xy.merge, counties.length.union)
+# scot.par.union.xy.merge <- merge(scot.par.union.xy, par.over.union, all.x = TRUE)
+# scot.par.union.xy.merge <- merge(scot.par.union.xy.merge, counties.length.union, all.x = TRUE)
+# 
+# # scot.par.union.xy.merge[is.na(scot.par.union.xy.merge)] <- 0 #  replace all NAs with 0s
 # 
 # for(i in names(scot.par.union.xy.merge)[grepl('.total', names(scot.par.union.xy.merge))]) { #  loop through the names of the columns storing the rewired network results
-# 
-#   scot.par.union.xy.merge[[paste0('delta', substr(i, 1, nchar(i) - 6))]] <- scot.par.union.xy.merge[[i]] - scot.par.union.xy.merge$total #  find the change between the network and observed
-#   scot.par.union.xy.merge[[paste0('per.change.', substr(i, 1, nchar(i) - 6))]] <- (scot.par.union.xy.merge[[i]] - scot.par.union.xy.merge$total) / scot.par.union.xy.merge$total #  find the percentage change
-# 
+#   
+#   if (substr(i, 1, 3) == 'Jun'){
+#     
+#     scot.par.union.xy.merge[[paste0('delta', substr(i, 1, nchar(i) - 6))]] <- scot.par.union.xy.merge[[i]] - scot.par.union.xy.merge$Jun.observed #  find the change between the network and observed
+#     scot.par.union.xy.merge[[paste0('per.change', substr(i, 1, nchar(i) - 6))]] <- (scot.par.union.xy.merge[[i]] - scot.par.union.xy.merge$Jun.observed) / scot.par.union.xy.merge$Jun.observed #  find the percentage change
+#     
+#   } else {
+#     
+#     scot.par.union.xy.merge[[paste0('delta', substr(i, 1, nchar(i) - 6))]] <- scot.par.union.xy.merge[[i]] - scot.par.union.xy.merge$Oct.observed #  find the change between the network and observed
+#     scot.par.union.xy.merge[[paste0('per.change', substr(i, 1, nchar(i) - 6))]] <- (scot.par.union.xy.merge[[i]] - scot.par.union.xy.merge$Oct.observed) / scot.par.union.xy.merge$Oct.observed #  find the percentage change
+#     
+#   }
 # }
 
-
-#~~~~~~~~~~~~~~~~~~~#
-#### create maps ####
-#~~~~~~~~~~~~~~~~~~~#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#### create choropleth maps ####
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
 # generic theme to apply to all maps
-map.theme <- theme(panel.background = element_rect(fill = "lightblue3"),
+map.theme <- theme(panel.background = element_rect(fill = "grey50"),
                    panel.grid.major = element_blank(),
                    panel.grid.minor = element_blank(),
                    axis.ticks = element_blank(),
                    axis.text = element_blank(),
                    axis.title = element_blank(),
-                   panel.border = element_blank())
+                   panel.border = element_blank(),
+                   legend.key.height = unit(1, "in"),
+                   legend.title = element_text(face = 'bold'))
 
 #~~~~~~~~~~~~~~~~~~~~~#
 #### June maps: 13 ####
 #~~~~~~~~~~~~~~~~~~~~~#
 
-test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaJun_13', names(scot.grid.xy.merge))], range) #  range of each
+test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaJun_13', names(scot.grid.xy.merge))], range, na.rm = TRUE) #  range of each
+# test <- lapply(scot.par.xy.merge[,grep(pattern = 'deltaJun_13', names(scot.par.xy.merge))], range) #  range of each
+# test <- lapply(scot.par.union.xy.merge[,grep(pattern = 'deltaJun_13', names(scot.par.union.xy.merge))], range) #  range of each
 Jun.13.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
                   ceiling(max(abs(range(unlist(test))))))
 
@@ -370,12 +415,12 @@ grid.arrange( #  for multiplot
     coord_equal() + map.theme +
     scale_fill_gradient2(#expression(paste("Infections per 10", km^{2})), 
       'Infections\n',
-      low = 'blue', midpoint = 0, high = 'red2', 
+      low = 'blue4', midpoint = 0, high = 'red4', 
       limits = Jun.13.range,
       breaks = seq.int(round_any(Jun.13.range, 5)[1], round_any(Jun.13.range, 5)[2], 5)), #  creates flexible breaks using round_any in plyr, 
   arrangeGrob(
     ggplot() +
-      geom_polygon(data=scot.grid.xy.merge, #  grid
+      geom_polygon(data=scot.grid.xy.merge, 
                    aes(long, lat, 
                        fill = deltaJun_13_FF,
                        group = group),
@@ -388,9 +433,9 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE, 
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.13.range), 
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Jun.13.range), 
     ggplot() +
-      geom_polygon(data=scot.grid.xy.merge, #  grid
+      geom_polygon(data=scot.grid.xy.merge,
                    aes(long, lat, 
                        fill = deltaJun_13_FT,
                        group = group),
@@ -403,9 +448,9 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE,
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.13.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Jun.13.range),
     ggplot() +
-      geom_polygon(data=scot.grid.xy.merge, #  grid
+      geom_polygon(data=scot.grid.xy.merge, 
                    aes(long, lat, 
                        fill = deltaJun_13_TF,
                        group = group),
@@ -418,9 +463,9 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE,
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.13.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Jun.13.range),
     ggplot() +
-      geom_polygon(data=scot.grid.xy.merge, #  grid
+      geom_polygon(data=scot.grid.xy.merge, 
                    aes(long, lat, 
                        fill = deltaJun_13_TT,
                        group = group),
@@ -433,7 +478,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE, 
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.13.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Jun.13.range),
     ncol = 2), 
   ncol = 2, widths = c(1, 1))
 dev.off()
@@ -442,7 +487,7 @@ dev.off()
 #### June maps: 6 ####
 #~~~~~~~~~~~~~~~~~~~~~#
 
-test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaJun_6', names(scot.grid.xy.merge))], range) #  range of each
+test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaJun_6', names(scot.grid.xy.merge))], range, na.rm = TRUE) #  range of each
 Jun.6.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
                   ceiling(max(abs(range(unlist(test))))))
 
@@ -463,7 +508,7 @@ grid.arrange( #  for multiplot
     coord_equal() + map.theme +
     scale_fill_gradient2(#expression(paste("Infections per 10", km^{2})), 
       'Infections\n',
-      low = 'blue', midpoint = 0, high = 'red2', 
+      low = 'blue4', midpoint = 0, high = 'red4', 
       limits = Jun.6.range, 
       breaks = seq.int(round_any(Jun.6.range, 5)[1], round_any(Jun.6.range, 5)[2], 5)), #  creates flexible breaks using round_any in plyr
   arrangeGrob(
@@ -481,7 +526,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE, 
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.6.range), 
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Jun.6.range), 
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -496,7 +541,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE,
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.6.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Jun.6.range),
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -511,7 +556,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE,
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.6.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Jun.6.range),
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -526,7 +571,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE, 
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Jun.6.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Jun.6.range),
     ncol = 2), 
   ncol = 2, widths = c(1, 1))
 dev.off()
@@ -535,7 +580,7 @@ dev.off()
 #### October maps: 13 ####
 #~~~~~~~~~~~~~~~~~~~~~~~~#
 
-test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaOct_13', names(scot.grid.xy.merge))], range) #  range of each
+test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaOct_13', names(scot.grid.xy.merge))], range, na.rm = TRUE) #  range of each
 Oct.13.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
                   ceiling(max(abs(range(unlist(test))))))
 
@@ -556,7 +601,7 @@ grid.arrange( #  for multiplot
     coord_equal() + map.theme +
     scale_fill_gradient2(#expression(paste("Infections per 10", km^{2})), 
       'Infections\n',
-      low = 'blue', midpoint = 0, high = 'red2', 
+      low = 'blue4', midpoint = 0, high = 'red4', 
       limits = Oct.13.range,
       breaks = seq.int(round_any(Oct.13.range, 5)[1], round_any(Oct.13.range, 5)[2], 5)), #  creates flexible breaks using round_any in plyr, 
   arrangeGrob(
@@ -574,7 +619,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE, 
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.13.range), 
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Oct.13.range), 
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -589,7 +634,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE,
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.13.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Oct.13.range),
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -604,7 +649,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE,
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.13.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Oct.13.range),
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -619,7 +664,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE, 
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.13.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Oct.13.range),
     ncol = 2), 
   ncol = 2, widths = c(1, 1))
 dev.off()
@@ -628,7 +673,7 @@ dev.off()
 #### October maps: 6 ####
 #~~~~~~~~~~~~~~~~~~~~~~~#
 
-test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaOct_6', names(scot.grid.xy.merge))], range) #  range of each
+test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaOct_6', names(scot.grid.xy.merge))], range, na.rm = TRUE) #  range of each
 Oct.6.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
                  ceiling(max(abs(range(unlist(test))))))
 
@@ -649,7 +694,7 @@ grid.arrange( #  for multiplot
     coord_equal() + map.theme +
     scale_fill_gradient2(#expression(paste("Infections per 10", km^{2})), 
       'Infections\n',
-      low = 'blue', midpoint = 0, high = 'red2', 
+      low = 'blue4', midpoint = 0, high = 'red4', 
       limits = Oct.6.range, 
       breaks = seq.int(-200, 200, by = 50)), #  creates flexible breaks using round_any in plyr
   arrangeGrob(
@@ -667,7 +712,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE, 
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.6.range), 
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Oct.6.range), 
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -682,7 +727,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE,
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.6.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Oct.6.range),
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -697,7 +742,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE,
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.6.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Oct.6.range),
     ggplot() +
       geom_polygon(data=scot.grid.xy.merge, #  grid
                    aes(long, lat, 
@@ -712,117 +757,7 @@ grid.arrange( #  for multiplot
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
       scale_fill_gradient2(guide=FALSE, 
-                           low = 'blue', midpoint = 0, high = 'red2', limits = Oct.6.range),
+                           low = 'blue4', midpoint = 0, high = 'red4', limits = Oct.6.range),
     ncol = 2), 
   ncol = 2, widths = c(1, 1))
 dev.off()
-
-# #Sibylle
-# ggplot() +
-#   #geom_polygon(data=scot.par.union.xy.merge, #  parishes
-#   geom_polygon(data=scot.par.union.xy.merge, #  counties
-#                aes(long,
-#                    lat,
-#                    group = group,
-#                    fill=per.change.Oct_13_FF)) +#,
-#                    #fill=deltaOct_13_FF))+
-#   coord_equal() + map.theme +
-#   scale_fill_gradientn('Oct_13_FF\nPercent change in the\nnumber of infected farms',
-#                        #limits=c(-0.5, 0.5),
-#                        colours=c("#E5F5F9","#99D8C9","#2CA25F"))#,
-# 
-# ggplot() +
-#   #geom_polygon(data=scot.par.xy.merge, #  parishes
-#   geom_polygon(data=scot.par.union.xy.merge, #  counties
-#                aes(long,
-#                    lat,
-#                    group = group,
-#                    #fill=per.changeOct_13_FT)) +#,
-#                    fill=deltaOct_13_FT)) +
-#   #fill = log10(delta.Oct_13_FT + 120855)), colour='black') + #  draws borders for either parishes or counties
-#   coord_equal() + map.theme +
-#   scale_fill_gradientn('Oct_13_FT\nTotal change in the\nnumber of infected farms',
-#                        #limits=c(0, 5.25),
-#                        colours=rev(rainbow(2252, start = 0, end = 0.66))) #,
-# ggplot() +
-#   #geom_polygon(data=scot.par.xy.merge, #  parishes
-#   geom_polygon(data=scot.par.union.xy.merge, #  counties
-#                aes(long,
-#                    lat,
-#                    group = group,
-#                    #fill=per.changeOct_13_TF)) +#,
-#                    fill = deltaOct_13_TF), # max = 2178, min = -42665
-#                colour='black') + #  draws borders for either parishes or counties
-#   coord_equal() + map.theme +
-#   scale_fill_gradientn('Oct_13_TF\nTotal change in the\nnumber of infected farms',
-#                        trans = "log",
-#                        #colours=rev(rainbow(2252, start = 0, end = 0.66)))#,
-#                        colours=c("#E5F5F9","#99D8C9","#2CA25F"))
-# 
-# ggplot() +
-#   #geom_polygon(data=scot.par.xy.merge, #  parishes
-#   geom_polygon(data=scot.par.union.xy.merge, #  counties
-#                aes(long,
-#                    lat,
-#                    group = group,
-#                    # fill=per.changeOct_13_TT)) +#,
-#                    fill=deltaOct_13_TT), # max = 3770, min = -26270
-#                colour='black') + #  draws borders for either parishes or counties
-#   coord_equal() + map.theme +
-#   scale_fill_gradientn('Oct_13_TT\nTotal change in the\nnumber of infected farms',
-#                        limits=c(-120854, 45525),
-#                        colours=rev(rainbow(2252, start = 0, end = 0.66))) # ,
-# ggplot() +
-#   #geom_polygon(data=scot.par.xy.merge, #  parishes
-#   geom_polygon(data=scot.par.union.xy.merge, #  counties
-#                aes(long,
-#                    lat,
-#                    group = group,
-#                    #fill=per.changeOct_6_FF)) +#,
-#                    fill = deltaOct_6_FF), # max = 31979, min = -16698
-#                colour='black') + #  draws borders for either parishes or counties
-#   coord_equal() + map.theme +
-#   scale_fill_gradientn('Oct_6_FF\nTotal change in the\nnumber of infected farms',
-#                        limits=c(-120854, 45525),
-#                        colours=rev(rainbow(2252, start = 0, end = 0.66)))#,
-# 
-# ggplot() +
-#   #geom_polygon(data=scot.par.xy.merge, #  parishes
-#   geom_polygon(data=scot.par.union.xy.merge, #  counties
-#                aes(long,
-#                    lat,
-#                    group = group,
-#                    # fill=per.changeOct_6_FT)) +#,
-#                    fill=deltaOct_6_FT), # max = 22918, min = -11123
-#                colour='black') + #  draws borders for either parishes or counties
-#   coord_equal() + map.theme +
-#   scale_fill_gradientn('Oct_6_FT\nTotal change in the\nnumber of infected farms',
-#                        limits=c(-120854, 45525),
-#                        colours=rev(rainbow(2252, start = 0, end = 0.66))) #,
-# 
-# ggplot() +
-#   #geom_polygon(data=scot.par.xy.merge, #  parishes
-#   geom_polygon(data=scot.par.xy.merge, #  counties
-#                aes(long,
-#                    lat,
-#                    group = group,
-#                    #fill=per.changeOct_6_TT)) +#,
-#                    fill=deltaOct_6_TT), # max = 2106, min = -48063
-#                colour='black') + #  draws borders for either parishes or counties
-#   coord_equal() + map.theme +
-#   scale_fill_gradientn('Oct_6_TT\nTotal change in the\nnumber of infected farms',
-#                        limits=c(-120854, 45525),
-#                        colours=rev(rainbow(2252, start = 0, end = .66)))#,
-
-# density gridarrange
-# png
-#grid.arrange(
-ggplot(scot.grid.xy.merge) +
-  geom_density(data = scot.grid.xy.merge, aes(x = Oct.observed, colour='red')) +
-  geom_density(data = scot.grid.xy.merge, aes(x = deltaOct_13_FF, colour='blue')) +
-  geom_density(data = scot.grid.xy.merge, aes(x = deltaOct_13_FT, colour='green')) +
-  geom_density(data = scot.grid.xy.merge, aes(x = deltaOct_13_TF, colour='yellow')) +
-  geom_density(data = scot.grid.xy.merge, aes(x = deltaOct_13_TT, colour='brown'))
-#ncol = 2
-#)
-

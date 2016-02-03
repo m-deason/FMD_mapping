@@ -19,7 +19,7 @@ library(gridExtra)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
 gb.10km <- readOGR(dsn = 'C:/Users/Michael/Google Drive/FMD model input/gb_10km', #  location of the folder containing the shapefiles
-                  layer = 'gb_10km') #  name of the shapefiles without extensions
+                   layer = 'gb_10km') #  name of the shapefiles without extensions
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 #### read in scotland parish shapefile ####
@@ -36,6 +36,7 @@ scot.par <- spTransform(scot.par, CRS(proj4string(gb.10km))) #  transform CRS to
 grid.crop <- gb.10km[!is.na(over(gb.10km, as(scot.par, "SpatialPolygons"))), ]
 scot.shell <- gIntersection(grid.crop, scot.par) #  maybe try to just get the shell of scotland?
 scot.grid <- as(gIntersection(grid.crop, scot.shell, byid = TRUE, drop_lower_td = TRUE), 'SpatialPolygonsDataFrame')
+rm(scot.shell)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 #### observed location data ####
@@ -110,10 +111,16 @@ master.key <- rbind(key.unique, missing.key) #  combine the unique county/parish
 master.key <- master.key[order(master.key$parish), ] #  order the parishes
 rm(key, key.unique, missing.key)
 
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 #### model output summary files ####
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+load('fmd_rewire_top5.RData') #  load in the top5 percent of epidemic size and duration from fmd_density.R
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#### model output matrices ####
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
 # summary file contains a matrix with cphs and dates of infection
 # months should be in seperate folders by month
@@ -131,29 +138,35 @@ names(output.summary) <- names(summary(c(1,2))) #  example use of summary to get
 # Load all rewired files; assign reasonable names
 
 for(i in names){
-
+  
   cat(which(i == names), 'of', length(names), 'rewired networks \n')
-
+  
   csv.name <- strsplit(i, '_') #  seperate the fields by '_'
-
+  
   month <- format(as.Date(csv.name[[1]][10], format = '%d-%m-%Y'), '%b') #  month is as.Date = 10th field
   stand.still <- csv.name[[1]][4] #  stand still = 4th field
-
+  
   nearest.market <- csv.name[[1]][7] #  nearest market = 7th field
   nearest.market <- substr(nearest.market, 1, 1) #  only store the first letter
-
+  
   exemptions <- csv.name[[1]][9]  # exemptions = 9th field
   exemptions <- substr(exemptions, 1, 1) #  only store the first letter
-
+  
   rewired.name <- paste0(month, '_', stand.still, '_', nearest.market, exemptions) #  create new dataframe names
   df.names[which(i == names)] <- rewired.name #  store df.names
-
+  
   output <- read.csv(file.path(summary.path, #  read in file from csv; assign new name
-                          paste0(i, ".csv")))
-
-  #   output <- output[order(output$Thread), ]
-#   output$run.id <- rep.int(1:500, 21)
-    output$Thread <- as.factor(output$Thread)
+                               paste0(i, ".csv")))
+  
+#   output <- output[order(output$Thread), ] #  order the threads 
+#   output$run.id <- rep.int(0:499, 21) #  assign the rep number to join with the top5 lists
+#   output$concat <- paste0(output$Thread, '_', output$run.id) # concat then subset
+#   
+#   top5.size <- get(paste0(rewired.name, '_top5.size'))
+#   top5.size$concat <- paste0(top5.size$Thread, '_', top5.size$rep)
+#   output.top5.size <- output[output$concat %in% top5.size$concat, ] #  subset the output for top5 size
+#   
+  output$Thread <- as.factor(output$Thread)
   
   output.summary[which(names==i), ] <- summary(output$Total)
   
@@ -164,14 +177,14 @@ for(i in names){
   x <- data.frame(total = rowSums(model.summary.t[2:nrow(model.summary.t), ]), #  calculate the row sums
                   cph = rownames(model.summary.t[2:nrow(model.summary.t), ])) #  get cphs from row names
   names(x) <- c(paste0(rewired.name,'.total'), 'cph') #  rename the column names
-
+  
   x$cph <- gsub('[.]', '/', x$cph) #  square brackets needed to replace full stop
   x$cph <- gsub('X', '', x$cph) #  remove 'X' from cph
   row.names(x) <- NULL #  remove row names
   assign(rewired.name, x) #  assign dataframe x a new name
-
+  
   rm(model.summary.t, exemptions, month, nearest.market, stand.still, x) #  clean up
-
+  
 }
 
 row.names(output.summary) <- df.names[1:16]
@@ -241,6 +254,7 @@ summary.points <- SpatialPointsDataFrame(cbind(summary.plot$x,
                                          data = summary.plot[,4:length(summary.plot)],
                                          proj4string = CRS("+init=epsg:27700")) #  projection for the observed data
 summary.points <- spTransform(summary.points, CRS(proj4string(gb.10km))) #  transform CRS to match gb.10km
+rm(gb.10km) #  free up memory
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 #### calculate the number of infected farms per polygon ####
@@ -284,8 +298,6 @@ for(i in names(scot.grid.xy.merge)[grepl('.total', names(scot.grid.xy.merge))]) 
     
   }
 }
-
-
 
 # #~~~~~~~~~~~~~~~~~#
 # #### ag parish ####
@@ -405,7 +417,7 @@ grid.arrange( #  for multiplot
                  aes(long, lat,
                      fill = Jun.observed,
                      group = group), 
-                 colour = 'gray') + #  draws borders for either parishes or counties
+                 colour = 'gray25') + #  draws borders for either parishes or counties
     geom_text(data=scot.grid.xy.merge,
               aes(label = 'June obs',  
                   x = min(scot.grid.xy.merge$long),
@@ -424,11 +436,11 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaJun_13_FF,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '13_FF',  
-                x = min(scot.grid.xy.merge$long),
-                y = max(scot.grid.xy.merge$lat)),
+                    x = min(scot.grid.xy.merge$long),
+                    y = max(scot.grid.xy.merge$lat)),
                 size = 16,
                 vjust = "inward", hjust = "inward") +
       coord_equal() + map.theme +
@@ -439,7 +451,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaJun_13_FT,
                        group = group),
-                   colour = 'gray') +
+                   colour = 'gray25') +
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '13_FT',  
                     x = min(scot.grid.xy.merge$long),
@@ -454,7 +466,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaJun_13_TF,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '13_TF',  
                     x = min(scot.grid.xy.merge$long),
@@ -469,7 +481,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaJun_13_TT,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '13_TT',  
                     x = min(scot.grid.xy.merge$long),
@@ -489,7 +501,7 @@ dev.off()
 
 test <- lapply(scot.grid.xy.merge[,grep(pattern = 'deltaJun_6', names(scot.grid.xy.merge))], range, na.rm = TRUE) #  range of each
 Jun.6.range <- c(ceiling(max(abs(range(unlist(test))))) * -1,
-                  ceiling(max(abs(range(unlist(test))))))
+                 ceiling(max(abs(range(unlist(test))))))
 
 png('Jun_6_plots.png', res = 300, height = 7, width = 12, units = 'in')
 grid.arrange( #  for multiplot 
@@ -498,7 +510,7 @@ grid.arrange( #  for multiplot
                  aes(long, lat,
                      fill = Jun.observed,
                      group = group), 
-                 colour = 'gray') + #  draws borders for either parishes or counties
+                 colour = 'gray25') + #  draws borders for either parishes or counties
     geom_text(data=scot.grid.xy.merge,
               aes(label = 'June obs',  
                   x = min(scot.grid.xy.merge$long),
@@ -517,7 +529,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaJun_6_FF,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '6_FF',  
                     x = min(scot.grid.xy.merge$long),
@@ -532,7 +544,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaJun_6_FT,
                        group = group),
-                   colour = 'gray') +
+                   colour = 'gray25') +
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '6_FT',  
                     x = min(scot.grid.xy.merge$long),
@@ -547,7 +559,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaJun_6_TF,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '6_TF',  
                     x = min(scot.grid.xy.merge$long),
@@ -562,7 +574,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaJun_6_TT,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '6_TT',  
                     x = min(scot.grid.xy.merge$long),
@@ -591,7 +603,7 @@ grid.arrange( #  for multiplot
                  aes(long, lat,
                      fill = Oct.observed,
                      group = group), 
-                 colour = 'gray') + #  draws borders for either parishes or counties
+                 colour = 'gray25') + #  draws borders for either parishes or counties
     geom_text(data=scot.grid.xy.merge,
               aes(label = 'Oct obs',  
                   x = min(scot.grid.xy.merge$long),
@@ -610,7 +622,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaOct_13_FF,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '13_FF',  
                     x = min(scot.grid.xy.merge$long),
@@ -625,7 +637,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaOct_13_FT,
                        group = group),
-                   colour = 'gray') +
+                   colour = 'gray25') +
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '13_FT',  
                     x = min(scot.grid.xy.merge$long),
@@ -640,7 +652,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaOct_13_TF,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '13_TF',  
                     x = min(scot.grid.xy.merge$long),
@@ -655,7 +667,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaOct_13_TT,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '13_TT',  
                     x = min(scot.grid.xy.merge$long),
@@ -684,7 +696,7 @@ grid.arrange( #  for multiplot
                  aes(long, lat,
                      fill = Oct.observed,
                      group = group), 
-                 colour = 'gray') + #  draws borders for either parishes or counties
+                 colour = 'gray25') + #  draws borders for either parishes or counties
     geom_text(data=scot.grid.xy.merge,
               aes(label = 'Oct obs',  
                   x = min(scot.grid.xy.merge$long),
@@ -703,7 +715,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaOct_6_FF,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '6_FF',  
                     x = min(scot.grid.xy.merge$long),
@@ -718,7 +730,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaOct_6_FT,
                        group = group),
-                   colour = 'gray') +
+                   colour = 'gray25') +
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '6_FT',  
                     x = min(scot.grid.xy.merge$long),
@@ -733,7 +745,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaOct_6_TF,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '6_TF',  
                     x = min(scot.grid.xy.merge$long),
@@ -748,7 +760,7 @@ grid.arrange( #  for multiplot
                    aes(long, lat, 
                        fill = deltaOct_6_TT,
                        group = group),
-                   colour = 'gray') + 
+                   colour = 'gray25') + 
       geom_text(data=scot.grid.xy.merge,
                 aes(label = '6_TT',  
                     x = min(scot.grid.xy.merge$long),
